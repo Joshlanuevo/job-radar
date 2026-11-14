@@ -5,6 +5,7 @@ import { AppService } from './app.service.js';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JobsModule } from './jobs/jobs.module.js';
+import { ProfileModule } from './profile/profile.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -18,6 +19,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       }),
     }),
     JobsModule,
+    ProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

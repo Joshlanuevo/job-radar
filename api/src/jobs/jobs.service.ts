@@ -9,12 +9,15 @@ import { JobSource, JobStatus } from './job.enums.js';
 import { QueryJobsDto } from './dto/query-jobs.dto.js';
 import { ExtractionService } from '../extraction/extraction.service.js';
 import { AnalyzeJobDto } from './dto/analyze-job.dto.js';
+import { ProfileService } from '../profile/profile.service.js';
+import { scoreJob } from '../scoring/score-job.js';
 
 @Injectable()
 export class JobsService {
   constructor(
     @InjectModel(Job.name) private readonly jobModel: Model<Job>,
     private readonly extraction: ExtractionService,
+    private readonly profile: ProfileService,
   ) { }
 
   static hashContent(text: string): string {
@@ -48,10 +51,15 @@ export class JobsService {
     // 2. AI extracts the facts
     const extracted = await this.extraction.extractFromText(analyzeJobDto.text);
 
-    // 3. Save
+    // 3. Score against my profile (plain code, no AI)
+    const profile = await this.profile.get();
+    const result = scoreJob(extracted, profile);
+
+    // 4. Save
     try {
       return await this.jobModel.create({
         ...extracted,
+        ...result,
         rawText: analyzeJobDto.text,
         url: analyzeJobDto.url ?? null,
         source: JobSource.PASTE,
