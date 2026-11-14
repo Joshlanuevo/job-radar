@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, HttpCode } from '@nestjs/common';
 import { JobsService } from './jobs.service.js';
 import { CreateJobDto } from './dto/create-job.dto.js';
 import { UpdateJobDto } from './dto/update-job.dto.js';
+import { QueryJobsDto } from './dto/query-jobs.dto.js';
+import { ParseObjectIdPipe } from '@nestjs/mongoose';
 
 @Controller('jobs')
 export class JobsController {
@@ -13,22 +15,23 @@ export class JobsController {
   }
 
   @Get()
-  findAll() {
-    return this.jobsService.findAll();
+  findAll(@Query() query: QueryJobsDto) {
+    return this.jobsService.findAll(query);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.jobsService.findOne(+id);
+  findOne(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.jobsService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateJobDto: UpdateJobDto) {
-    return this.jobsService.update(+id, updateJobDto);
+  update(@Param('id', ParseObjectIdPipe) id: string, @Body() updateJobDto: UpdateJobDto) {
+    return this.jobsService.update(id, updateJobDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.jobsService.remove(+id);
+  @HttpCode(204)
+  remove(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.jobsService.remove(id);
   }
 }

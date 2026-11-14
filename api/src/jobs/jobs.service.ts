@@ -1,26 +1,68 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateJobDto } from './dto/create-job.dto.js';
 import { UpdateJobDto } from './dto/update-job.dto.js';
+import { InjectModel } from '@nestjs/mongoose';
+import { Job } from './schemas/job.schema.js';
+import { Model, QueryFilter, SortOrder } from 'mongoose';
+import { createHash } from 'node:crypto';
+import { JobSource, JobStatus } from './job.enums.js';
+import { QueryJobsDto } from './dto/query-jobs.dto.js';
 
 @Injectable()
 export class JobsService {
-  create(createJobDto: CreateJobDto) {
-    return 'This action adds a new job';
+  constructor(@InjectModel(Job.name) private readonly jobModel: Model<Job>) { }
+
+  static hashContent(text: string): string {
+    const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
+    return createHash('sha256').update(normalized).digest('hex');
   }
 
-  findAll() {
-    return `This action returns all jobs`;
+  async create(createJobDto: CreateJobDto) {
+    try {
+      return await this.jobModel.create({
+        ...createJobDto,
+        source: createJobDto.source ?? JobSource.PASTE,
+        contentHash: JobsService.hashContent(createJobDto.rawText),
+      });
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw new ConflictException('This job post is already saved');
+      }
+      throw err;
+    }
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} job`;
+  findAll(query: QueryJobsDto) {
+    const filter: QueryFilter<Job> = {};
+    if (query.status) filter.status = query.status;
+    if (query.workSetup) filter.workSetup = query.workSetup;
+    if (query.minScore !== undefined) filter.score = { $gte: query.minScore };
+
+    const sort: Record<string, SortOrder> =
+      query.sort === 'newest' ? { createdAt: -1 } : { score: -1, createdAt: -1 };
+
+    return this.jobModel.find(filter).sort(sort).lean();
   }
 
-  update(id: number, updateJobDto: UpdateJobDto) {
-    return `This action updates a #${id} job`;
+  async findOne(id: string) {
+    const job = await this.jobModel.findById(id).lean();
+    if (!job) throw new NotFoundException('Job not found');
+    return job;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} job`;
+  async update(id: string, updateJobDto: UpdateJobDto) {
+    const changes: Partial<Job> = { ...updateJobDto };
+    if (updateJobDto.status === JobStatus.APPLIED) changes.appliedAt = new Date();
+
+    const job = await this.jobModel
+      .findByIdAndUpdate(id, changes, { returnDocument: 'after' })
+      .lean();
+    if (!job) throw new NotFoundException('Job not found');
+    return job;
+  }
+
+  async remove(id: string) {
+    const job = await this.jobModel.findByIdAndDelete(id);
+    if (!job) throw new NotFoundException('Job not found');
   }
 }

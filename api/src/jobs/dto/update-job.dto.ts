@@ -1,4 +1,13 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateJobDto } from './create-job.dto.js';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { JobStatus } from '../job.enums.js';
 
-export class UpdateJobDto extends PartialType(CreateJobDto) {}
+export class UpdateJobDto {
+  @IsOptional()
+  @IsEnum(JobStatus)
+  status?: JobStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  notes?: string;
+}
