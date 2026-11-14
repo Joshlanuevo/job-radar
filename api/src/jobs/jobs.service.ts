@@ -7,10 +7,15 @@ import { Model, QueryFilter, SortOrder } from 'mongoose';
 import { createHash } from 'node:crypto';
 import { JobSource, JobStatus } from './job.enums.js';
 import { QueryJobsDto } from './dto/query-jobs.dto.js';
+import { ExtractionService } from '../extraction/extraction.service.js';
+import { AnalyzeJobDto } from './dto/analyze-job.dto.js';
 
 @Injectable()
 export class JobsService {
-  constructor(@InjectModel(Job.name) private readonly jobModel: Model<Job>) { }
+  constructor(
+    @InjectModel(Job.name) private readonly jobModel: Model<Job>,
+    private readonly extraction: ExtractionService,
+  ) { }
 
   static hashContent(text: string): string {
     const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -25,6 +30,35 @@ export class JobsService {
         contentHash: JobsService.hashContent(createJobDto.rawText),
       });
     } catch (err) {
+      if ((err as { code?: number }).code === 11000) {
+        throw new ConflictException('This job post is already saved');
+      }
+      throw err;
+    }
+  }
+
+  async analyze(analyzeJobDto: AnalyzeJobDto) {
+    const contentHash = JobsService.hashContent(analyzeJobDto.text);
+
+    // 1. Duplicate check BEFORE calling Claude (duplicates shouldn't cost money)
+    if (await this.jobModel.exists({ contentHash })) {
+      throw new ConflictException('This job post is already saved');
+    }
+
+    // 2. AI extracts the facts
+    const extracted = await this.extraction.extractFromText(analyzeJobDto.text);
+
+    // 3. Save
+    try {
+      return await this.jobModel.create({
+        ...extracted,
+        rawText: analyzeJobDto.text,
+        url: analyzeJobDto.url ?? null,
+        source: JobSource.PASTE,
+        contentHash,
+      });
+    } catch (err) {
+      // Two identical requests at the same time can both pass step 1
       if ((err as { code?: number }).code === 11000) {
         throw new ConflictException('This job post is already saved');
       }
