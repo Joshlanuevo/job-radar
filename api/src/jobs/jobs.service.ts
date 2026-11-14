@@ -74,6 +74,22 @@ export class JobsService {
     }
   }
 
+  async rescoreAll() {
+    const profile = await this.profile.get();
+    const jobs = await this.jobModel.find().lean();
+
+    await this.jobModel.bulkWrite(
+      jobs.map((job) => ({
+        updateOne: {
+          filter: { _id: job._id },
+          update: { $set: scoreJob(job, profile) },
+        },
+      })),
+    );
+    return { rescored: jobs.length };
+  }
+
+
   findAll(query: QueryJobsDto) {
     const filter: QueryFilter<Job> = {};
     if (query.status) filter.status = query.status;

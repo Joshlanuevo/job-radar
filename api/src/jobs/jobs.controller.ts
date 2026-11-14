@@ -20,6 +20,12 @@ export class JobsController {
     return this.jobsService.analyze(analyzeJobDto);
   }
 
+  @Post('rescore')
+  rescore() {
+    return this.jobsService.rescoreAll();
+  }
+
+
   @Get()
   findAll(@Query() query: QueryJobsDto) {
     return this.jobsService.findAll(query);
