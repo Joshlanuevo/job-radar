@@ -1,7 +1,5 @@
 import { useState, type ChangeEvent } from 'react';
-import { updateJob, type Job, type JobStatus } from '../api';
-
-const STATUSES: JobStatus[] = ['new', 'applied', 'interview', 'rejected', 'offer'];
+import { updateJob, JOB_STATUSES, type Job, type JobStatus } from '../api';
 
 function scoreClasses(score: number | null) {
     if (score === null) return 'border-slate-400 text-slate-500';
@@ -58,7 +56,7 @@ export function JobCard({ job, onUpdated }: { job: Job; onUpdated: (job: Job) =>
                         className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm capitalize
                    disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
                     >
-                        {STATUSES.map((s) => (
+                        {JOB_STATUSES.map((s) => (
                             <option key={s} value={s}>{s}</option>
                         ))}
                     </select>

@@ -1,6 +1,37 @@
 export type WorkSetup = 'remote' | 'hybrid' | 'onsite';
 export type Shift = 'day' | 'night' | 'unknown';
 export type JobStatus = 'new' | 'applied' | 'interview' | 'rejected' | 'offer';
+export const JOB_STATUSES: JobStatus[] = ['new', 'applied', 'interview', 'rejected', 'offer'];
+export const WORK_SETUPS: WorkSetup[] = ['remote', 'hybrid', 'onsite'];
+
+export interface JobFilters {
+    status?: JobStatus;
+    workSetup?: WorkSetup;
+    minScore?: number;
+    sort?: 'score' | 'newest';
+}
+
+export function filtersToQuery(f: JobFilters): string {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(f)) {
+        if (value !== undefined) params.set(key, String(value));
+    }
+    return params.toString();
+}
+
+// The URL is user input: keep only valid values, or the API answers 400
+export function filtersFromQuery(search: string): JobFilters {
+    const p = new URLSearchParams(search);
+    const f: JobFilters = {};
+    const status = p.get('status') as JobStatus;
+    if (JOB_STATUSES.includes(status)) f.status = status;
+    const workSetup = p.get('workSetup') as WorkSetup;
+    if (WORK_SETUPS.includes(workSetup)) f.workSetup = workSetup;
+    const minScore = Number(p.get('minScore'));
+    if (Number.isInteger(minScore) && minScore > 0 && minScore <= 100) f.minScore = minScore;
+    if (p.get('sort') === 'newest') f.sort = 'newest';
+    return f;
+}
 
 export interface Job {
     _id: string;
@@ -52,7 +83,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return res.json() as Promise<T>;
 }
 
-export const getJobs = () => request<Job[]>('/jobs');
+export const getJobs = (filters: JobFilters = {}) => {
+    const qs = filtersToQuery(filters);
+    return request<Job[]>(`/jobs${qs ? `?${qs}` : ''}`);
+};
 
 export const analyzeJob = (text: string, url?: string) =>
     request<Job>('/jobs/analyze', {

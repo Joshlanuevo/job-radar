@@ -1,31 +1,48 @@
 import { useEffect, useState } from 'react';
-import { getJobs, type Job } from './api';
+import { filtersFromQuery, filtersToQuery, getJobs, type Job, type JobFilters } from './api';
 import { AddJobForm } from './components/AddJobForm';
+import { FilterBar } from './components/FilterBar';
 import { JobList } from './components/JobList';
 
 export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  async function loadJobs() {
-    try {
-      setError(null);
-      setJobs(await getJobs());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load jobs');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [filters, setFilters] = useState<JobFilters>(() => filtersFromQuery(window.location.search));
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    loadJobs();
-  }, []);
+    const qs = filtersToQuery(filters);
+    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+
+    let ignore = false;
+    getJobs(filters)
+      .then((data) => {
+        if (ignore) return;
+        setJobs(data);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (!ignore) setError(err instanceof Error ? err.message : 'Could not load jobs');
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [filters, reloadKey]);
 
   function handleUpdated(updated: Job) {
-    setJobs((prev) => prev.map((j) => (j._id === updated._id ? updated : j)));
+    setJobs((prev) =>
+      filters.status && updated.status !== filters.status
+        ? prev.filter((j) => j._id !== updated._id) // no longer matches the filter
+        : prev.map((j) => (j._id === updated._id ? updated : j)),
+    );
   }
+
+  const hasFilters = Object.values(filters).some((v) => v !== undefined);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -37,11 +54,19 @@ export default function App() {
           </p>
         </header>
 
-        <AddJobForm onAdded={loadJobs} />
+        <AddJobForm onAdded={() => setReloadKey((k) => k + 1)} />
+
+        <FilterBar filters={filters} onChange={setFilters} />
 
         {loading && <p className="text-slate-500">Loading jobs…</p>}
         {error && <p className="text-red-600 dark:text-red-400">{error} (is the API running on :3000?)</p>}
-        {!loading && !error && <JobList jobs={jobs} onUpdated={handleUpdated} />}
+        {!loading && !error && (
+          <JobList
+            jobs={jobs}
+            onUpdated={handleUpdated}
+            emptyText={hasFilters ? 'No jobs match these filters.' : 'No jobs yet. Paste a post above to get started.'}
+          />
+        )}
       </main>
     </div>
   );
