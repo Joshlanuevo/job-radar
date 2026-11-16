@@ -54,8 +54,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getJobs = () => request<Job[]>('/jobs');
 
-export const analyzeJob = (text: string, url?: string) => 
+export const analyzeJob = (text: string, url?: string) =>
     request<Job>('/jobs/analyze', {
         method: 'POST',
         body: JSON.stringify({ text, url: url || undefined }),
     });
+
+export const updateJob = (id: string, patch: { status?: JobStatus; notes?: string }) =>
+    request<Job>(`/jobs/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+    });
+

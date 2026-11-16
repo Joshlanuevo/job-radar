@@ -1,4 +1,7 @@
-import type { Job } from '../api';
+import { useState, type ChangeEvent } from 'react';
+import { updateJob, type Job, type JobStatus } from '../api';
+
+const STATUSES: JobStatus[] = ['new', 'applied', 'interview', 'rejected', 'offer'];
 
 function scoreClasses(score: number | null) {
     if (score === null) return 'border-slate-400 text-slate-500';
@@ -17,7 +20,22 @@ function formatSalary(job: Job) {
     return `${cur} ${fmt((job.salaryMax ?? job.salaryMin)!)}`.trim();
 }
 
-export function JobCard({ job }: { job: Job }) {
+export function JobCard({ job, onUpdated }: { job: Job; onUpdated: (job: Job) => void }) {
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    async function handleStatus(e: ChangeEvent<HTMLSelectElement>) {
+        setSaving(true);
+        setError(null);
+        try {
+            onUpdated(await updateJob(job._id, { status: e.target.value as JobStatus }));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not update status');
+        } finally {
+            setSaving(false);
+        }
+    }
+
     const salary = formatSalary(job);
     const meta = [job.company, job.location, job.workSetup, job.shift !== 'unknown' ? `${job.shift} shift` : null, salary]
         .filter(Boolean)
@@ -31,7 +49,21 @@ export function JobCard({ job }: { job: Job }) {
             </div>
 
             <div className="min-w-0">
-                <h3 className="text-[17px] font-semibold">{job.title ?? 'Untitled role'}</h3>
+                <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-[17px] font-semibold">{job.title ?? 'Untitled role'}</h3>
+                    <select
+                        value={job.status}
+                        onChange={handleStatus}
+                        disabled={saving}
+                        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm capitalize
+                   disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
+                    >
+                        {STATUSES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                </div>
+                {error && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>}
                 {meta && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{meta}</p>}
 
                 {job.redFlags.length > 0 && (

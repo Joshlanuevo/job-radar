@@ -23,6 +23,10 @@ export default function App() {
     loadJobs();
   }, []);
 
+  function handleUpdated(updated: Job) {
+    setJobs((prev) => prev.map((j) => (j._id === updated._id ? updated : j)));
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <main className="mx-auto grid max-w-3xl gap-6 px-4 pt-8 pb-16">
@@ -37,7 +41,7 @@ export default function App() {
 
         {loading && <p className="text-slate-500">Loading jobs…</p>}
         {error && <p className="text-red-600 dark:text-red-400">{error} (is the API running on :3000?)</p>}
-        {!loading && !error && <JobList jobs={jobs} />}
+        {!loading && !error && <JobList jobs={jobs} onUpdated={handleUpdated} />}
       </main>
     </div>
   );
