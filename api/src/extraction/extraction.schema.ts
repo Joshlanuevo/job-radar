@@ -16,3 +16,11 @@ export const ExtractedJobSchema = z.object({
 });
 
 export type ExtractedJob = z.infer<typeof ExtractedJobSchema>;
+
+// postText comes FIRST: the model writes fields in order, so it reads the post before extracting from it
+export const ExtractedJobFromImageSchema = z.object({
+  postText: z.string().describe('Full text of the job post, exactly as written. Exclude app UI like buttons, likes, comments.'),
+  ...ExtractedJobSchema.shape,
+});
+
+export type ExtractedJobFromImage = z.infer<typeof ExtractedJobFromImageSchema>;

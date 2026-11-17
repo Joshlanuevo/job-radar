@@ -2,7 +2,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { BadGatewayException, Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ExtractedJob, ExtractedJobSchema } from './extraction.schema.js';
+import { z } from 'zod';
+import { ExtractedJobFromImageSchema, ExtractedJobSchema } from './extraction.schema.js';
+
+export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp';
 
 const SYSTEM_PROMPT = `You extract facts from job posts (LinkedIn, JobStreet, Facebook groups).
 Posts may be messy or in Taglish.
@@ -25,18 +28,35 @@ export class ExtractionService {
     this.model = config.getOrThrow<string>('CLAUDE_MODEL');
   }
 
-  async extractFromText(text: string): Promise<ExtractedJob> {
+  extractFromText(text: string) {
+    return this.run(ExtractedJobSchema, `<job_post>\n${text}\n</job_post>`);
+  }
+
+  extractFromImage(image: Buffer, mediaType: ImageMediaType) {
+    return this.run(ExtractedJobFromImageSchema, [
+      {
+        type: 'image',
+        source: { type: 'base64', media_type: mediaType, data: image.toString('base64') },
+      },
+      {
+        type: 'text',
+        text: 'This screenshot shows a job post. Transcribe the post into postText, then extract the job facts.',
+      },
+    ]);
+  }
+
+  private async run<T extends z.ZodType>(
+    schema: T,
+    content: Anthropic.MessageParam['content'],
+  ): Promise<z.infer<T>> {
     let response;
     try {
       response = await this.client.messages.parse({
         model: this.model,
         max_tokens: 4000,
         system: SYSTEM_PROMPT,
-        output_config: {
-          effort: 'low',
-          format: zodOutputFormat(ExtractedJobSchema),
-        },
-        messages: [{ role: 'user', content: `<job_post>\n${text}\n</job_post>` }],
+        output_config: { effort: 'low', format: zodOutputFormat(schema) },
+        messages: [{ role: 'user', content }],
       });
     } catch (err) {
       if (err instanceof Anthropic.APIError) {

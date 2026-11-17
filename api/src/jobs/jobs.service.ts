@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { CreateJobDto } from './dto/create-job.dto.js';
 import { UpdateJobDto } from './dto/update-job.dto.js';
 import { InjectModel } from '@nestjs/mongoose';
@@ -7,7 +7,8 @@ import { Model, QueryFilter, SortOrder } from 'mongoose';
 import { createHash } from 'node:crypto';
 import { JobSource, JobStatus } from './job.enums.js';
 import { QueryJobsDto } from './dto/query-jobs.dto.js';
-import { ExtractionService } from '../extraction/extraction.service.js';
+import { ExtractionService, type ImageMediaType } from '../extraction/extraction.service.js';
+import type { ExtractedJob } from '../extraction/extraction.schema.js';
 import { AnalyzeJobDto } from './dto/analyze-job.dto.js';
 import { ProfileService } from '../profile/profile.service.js';
 import { scoreJob } from '../scoring/score-job.js';
@@ -40,33 +41,56 @@ export class JobsService {
     }
   }
 
-  async analyze(analyzeJobDto: AnalyzeJobDto) {
-    const contentHash = JobsService.hashContent(analyzeJobDto.text);
+  async analyze(dto: AnalyzeJobDto) {
+    const contentHash = JobsService.hashContent(dto.text);
 
-    // 1. Duplicate check BEFORE calling Claude (duplicates shouldn't cost money)
+    // Duplicate check BEFORE calling Claude (duplicates shouldn't cost money)
     if (await this.jobModel.exists({ contentHash })) {
       throw new ConflictException('This job post is already saved');
     }
 
-    // 2. AI extracts the facts
-    const extracted = await this.extraction.extractFromText(analyzeJobDto.text);
+    const extracted = await this.extraction.extractFromText(dto.text);
+    return this.scoreAndSave(extracted, dto.text, contentHash, JobSource.PASTE, dto.url);
+  }
 
-    // 3. Score against my profile (plain code, no AI)
+  async analyzeImage(file: Express.Multer.File, url?: string) {
+    // No duplicate check before Claude here: we only know the text after reading the image
+    const { postText, ...extracted } = await this.extraction.extractFromImage(
+      file.buffer,
+      file.mimetype as ImageMediaType, // the controller already checked the type
+    );
+    if (!postText.trim()) {
+      throw new UnprocessableEntityException('No job post found in this image');
+    }
+
+    const contentHash = JobsService.hashContent(postText);
+    if (await this.jobModel.exists({ contentHash })) {
+      throw new ConflictException('This job post is already saved');
+    }
+    return this.scoreAndSave(extracted, postText, contentHash, JobSource.SCREENSHOT, url);
+  }
+
+  private async scoreAndSave(
+    extracted: ExtractedJob,
+    rawText: string,
+    contentHash: string,
+    source: JobSource,
+    url?: string,
+  ) {
     const profile = await this.profile.get();
     const result = scoreJob(extracted, profile);
 
-    // 4. Save
     try {
       return await this.jobModel.create({
         ...extracted,
         ...result,
-        rawText: analyzeJobDto.text,
-        url: analyzeJobDto.url ?? null,
-        source: JobSource.PASTE,
+        rawText,
+        url: url ?? null,
+        source,
         contentHash,
       });
     } catch (err) {
-      // Two identical requests at the same time can both pass step 1
+      // Two identical requests at the same time can both pass the exists() check
       if ((err as { code?: number }).code === 11000) {
         throw new ConflictException('This job post is already saved');
       }
@@ -88,7 +112,6 @@ export class JobsService {
     );
     return { rescored: jobs.length };
   }
-
 
   findAll(query: QueryJobsDto) {
     const filter: QueryFilter<Job> = {};
