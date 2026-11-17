@@ -68,8 +68,8 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`/api${path}`, {
-        headers: { 'Content-Type': 'application/json' },
         ...init,
+        headers: typeof init?.body === 'string' ? { 'Content-Type': 'application/json' } : undefined,
     });
 
     if (!res.ok) {
@@ -94,9 +94,14 @@ export const analyzeJob = (text: string, url?: string) =>
         body: JSON.stringify({ text, url: url || undefined }),
     });
 
+export const analyzeImage = (file: File) => {
+    const form = new FormData();
+    form.append('image', file); // same name as FileInterceptor('image')
+    return request<Job>('/jobs/analyze-image', { method: 'POST', body: form });
+};
+
 export const updateJob = (id: string, patch: { status?: JobStatus; notes?: string }) =>
     request<Job>(`/jobs/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(patch),
     });
-
